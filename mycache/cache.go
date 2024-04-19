@@ -1,9 +1,9 @@
 // 并发控制，通过互斥索实现并发缓存，并封装lru的相关函数
 
-package MyCache
+package mycache
 
 import (
-	"MyCache/lru"
+	"mycache/lru"
 	"sync"
 )
 

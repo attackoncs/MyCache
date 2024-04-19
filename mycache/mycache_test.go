@@ -1,4 +1,4 @@
-package MyCache
+package mycache
 
 import (
 	"fmt"

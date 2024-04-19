@@ -1,6 +1,6 @@
 //缓存值的抽象和封装
 
-package MyCache
+package mycache
 
 // 以便支持任意类似能够，如字符串、图片等
 type ByteView struct {

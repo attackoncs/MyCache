@@ -1,3 +1,5 @@
+//lru缓存淘汰策略
+
 package lru
 
 import "container/list"

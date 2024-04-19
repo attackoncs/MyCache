@@ -1,6 +1,6 @@
 //与外部交互，控制缓存存储和获取的主流程
 
-package MyCache
+package mycache
 
 import (
 	"fmt"
