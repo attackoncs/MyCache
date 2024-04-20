@@ -17,9 +17,10 @@ import (
 			  |-----> 调用`回调函数`，获取值并添加到缓存 --> 返回缓存值 ⑶
 */
 type Group struct {
-	name      string //缓存名称
-	getter    Getter //缓存未命中时获取源数据的回掉
-	mainCache cache  //实现的并发缓存
+	name      string     //缓存名称
+	getter    Getter     //缓存未命中时获取源数据的回掉
+	mainCache cache      //实现的并发缓存
+	peers     PeerPicker //定位节点对应特定key的HTTP客户端
 }
 
 // 不支持多数据源配置，由用户决定数据获取，设计回掉函数，缓存不存在时，调用回掉得到源数据
@@ -81,9 +82,35 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
-// 分布式场景下，load会从远程节点获取getFromPeer,失败了再会推到getLocally。这里预留
+// 注册节点，用于选择远程对等节点
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+// 分布式场景下，load会从远程节点获取getFromPeer,失败了再会推到getLocally。
 func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[MyCache] Failed to get from peer", err)
+		}
+	}
+
 	return g.getLocally(key)
+}
+
+// PeerGetter接口的httpGetter从访问远程节点获取对应group和key的缓存
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
 }
 
 // 从本地获取缓存，注意cloneBytes这里，切片不会被深拷贝，bytes是返回的切片
