@@ -5,6 +5,7 @@ package mycache
 import (
 	"fmt"
 	"log"
+	"mycache/singleflight"
 	"sync"
 )
 
@@ -17,10 +18,11 @@ import (
 			  |-----> 调用`回调函数`，获取值并添加到缓存 --> 返回缓存值 ⑶
 */
 type Group struct {
-	name      string     //缓存名称
-	getter    Getter     //缓存未命中时获取源数据的回掉
-	mainCache cache      //实现的并发缓存
-	peers     PeerPicker //定位节点对应特定key的HTTP客户端
+	name      string              //缓存名称
+	getter    Getter              //缓存未命中时获取源数据的回掉
+	mainCache cache               //实现的并发缓存
+	peers     PeerPicker          //定位节点对应特定key的HTTP客户端
+	loader    *singleflight.Group //确保每个key都只被请求一次
 }
 
 // 不支持多数据源配置，由用户决定数据获取，设计回掉函数，缓存不存在时，调用回掉得到源数据
@@ -56,6 +58,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g //同样严格来说只需对map进行加解锁
 	return g
@@ -92,16 +95,23 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 
 // 分布式场景下，load会从远程节点获取getFromPeer,失败了再会推到getLocally。
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if value, err = g.getFromPeer(peer, key); err == nil {
-				return value, nil
+	viewi, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if value, err = g.getFromPeer(peer, key); err == nil {
+					return value, nil
+				}
+				log.Println("[MyCache] Failed to get from peer", err)
 			}
-			log.Println("[MyCache] Failed to get from peer", err)
 		}
-	}
 
-	return g.getLocally(key)
+		return g.getLocally(key)
+	})
+
+	if err == nil {
+		return viewi.(ByteView), nil
+	}
+	return
 }
 
 // PeerGetter接口的httpGetter从访问远程节点获取对应group和key的缓存
