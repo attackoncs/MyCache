@@ -1,0 +1,22 @@
+syntax="proto3";
+
+package mycachepb;
+
+//这句必不可少
+option go_package=".";
+
+//请求时的参数
+message Request{
+  string group=1;
+  string key=2;
+}
+
+//响应时的参数
+message Response{
+  bytes value=1;
+}
+
+//rpc服务接口
+service GroupCache{
+  rpc Get(Request) returns (Response);
+}

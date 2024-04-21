@@ -5,6 +5,7 @@ package mycache
 import (
 	"fmt"
 	"log"
+	pb "mycache/mycachepb"
 	"mycache/singleflight"
 	"sync"
 )
@@ -116,11 +117,16 @@ func (g *Group) load(key string) (value ByteView, err error) {
 
 // PeerGetter接口的httpGetter从访问远程节点获取对应group和key的缓存
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
-	bytes, err := peer.Get(g.name, key)
+	req := &pb.Request{
+		Group: g.name,
+		Key:   key,
+	}
+	res := &pb.Response{}
+	err := peer.Get(req, res)
 	if err != nil {
 		return ByteView{}, err
 	}
-	return ByteView{b: bytes}, nil
+	return ByteView{b: res.Value}, nil
 }
 
 // 从本地获取缓存，注意cloneBytes这里，切片不会被深拷贝，bytes是返回的切片
